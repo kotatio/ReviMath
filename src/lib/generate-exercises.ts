@@ -8,7 +8,7 @@ function buildPrompt(text: string, level: string): string {
 
   return `${SYSTEM_PROMPT}
 
-A partir du contenu suivant extrait d'un document PDF de maths, genere exactement 10 exercices varies pour un eleve de ${level}.
+A partir du contenu suivant extrait d'un document de maths, genere exactement 10 exercices varies pour un eleve de ${level}.
 
 Contenu du document :
 ---
@@ -56,8 +56,8 @@ Regles strictes :
 - JSON valide uniquement, aucun texte avant ou apres`;
 }
 
-const MAX_RETRIES = 3;
-const RETRY_DELAY_MS = 5000;
+const MAX_RETRIES = 4;
+const RETRY_DELAY_MS = 15000;
 
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -85,7 +85,7 @@ async function callGemini(prompt: string, apiKey: string): Promise<string> {
         await wait(RETRY_DELAY_MS * (attempt + 1));
         continue;
       }
-      throw new Error('Trop de requetes Gemini. Attends 1 minute et reessaie.');
+      throw new Error('Trop de requetes Gemini. Attends 2 minutes et reessaie.');
     }
 
     if (!response.ok) {
