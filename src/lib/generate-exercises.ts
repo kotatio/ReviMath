@@ -2,8 +2,10 @@ import type { Exercise } from '../types';
 
 const SYSTEM_PROMPT = `Tu es un professeur de mathematiques experimente. Tu crees des exercices pour des eleves de college (6e-5e, 11-12 ans). Tes exercices sont clairs, precis, et adaptes au niveau demande. Tu reponds UNIQUEMENT avec du JSON valide, sans commentaire ni texte autour.`;
 
-function buildUserPrompt(text: string, level: string): string {
-  return `A partir du contenu suivant extrait d'un document PDF de maths, genere exactement 10 exercices varies pour un eleve de ${level}.
+function buildPrompt(text: string, level: string): string {
+  return `${SYSTEM_PROMPT}
+
+A partir du contenu suivant extrait d'un document PDF de maths, genere exactement 10 exercices varies pour un eleve de ${level}.
 
 Contenu du document :
 ---
@@ -56,37 +58,39 @@ export async function generateExercises(
   level: string,
   apiKey: string
 ): Promise<Exercise[]> {
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+  const response = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 4096,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: buildUserPrompt(text, level) }],
+      contents: [{ parts: [{ text: buildPrompt(text, level) }] }],
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 4096,
+        responseMimeType: 'application/json',
+      },
     }),
   });
 
   if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    if (response.status === 401) throw new Error('Cle API invalide');
-    if (response.status === 429) throw new Error('Trop de requetes, reessaie dans quelques secondes');
-    throw new Error((err as { error?: { message?: string } }).error?.message ?? `Erreur API (${response.status})`);
+    const err = await response.json().catch(() => ({})) as { error?: { message?: string; status?: string } };
+    if (response.status === 400 && err.error?.message?.includes('API key'))
+      throw new Error('Cle API Gemini invalide');
+    if (response.status === 429)
+      throw new Error('Trop de requetes, reessaie dans quelques secondes');
+    throw new Error(err.error?.message ?? `Erreur API (${response.status})`);
   }
 
   const data = await response.json() as {
-    content: Array<{ type: string; text?: string }>;
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
   };
-  const textBlock = data.content.find((b) => b.type === 'text');
-  if (!textBlock?.text) throw new Error('Reponse vide de Claude');
 
-  // Extract JSON from response (handle potential markdown wrapping)
-  let jsonStr = textBlock.text.trim();
+  const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!rawText) throw new Error('Reponse vide de Gemini');
+
+  // Extract JSON from response
+  let jsonStr = rawText.trim();
   const jsonMatch = jsonStr.match(/\[[\s\S]*\]/);
   if (jsonMatch) jsonStr = jsonMatch[0];
 
@@ -94,12 +98,11 @@ export async function generateExercises(
   try {
     exercises = JSON.parse(jsonStr);
   } catch {
-    throw new Error('Claude a renvoye du JSON invalide. Reessaie.');
+    throw new Error('Gemini a renvoye du JSON invalide. Reessaie.');
   }
 
   if (!Array.isArray(exercises)) throw new Error('Format inattendu');
 
-  // Add IDs and validate
   const timestamp = Date.now();
   return exercises.map((ex, i) => ({
     id: `gen-${timestamp}-${i}`,

@@ -78,7 +78,7 @@ export default function Import() {
   const handleGenerate = async () => {
     const key = getActiveKey();
     if (!key) {
-      setError('Saisis ta cle API Claude');
+      setError('Saisis ta cle API Gemini');
       return;
     }
     // Save the key if it's new
@@ -138,7 +138,7 @@ export default function Import() {
         <div className="bg-white rounded-xl p-5 shadow-sm">
           <div className="flex items-center gap-2 mb-3">
             <Key size={18} className="text-gray-500" />
-            <h2 className="font-bold text-gray-900">Cle API Claude</h2>
+            <h2 className="font-bold text-gray-900">Cle API Gemini</h2>
           </div>
 
           {hasKey ? (
@@ -162,7 +162,7 @@ export default function Import() {
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleSaveKey()}
-                  placeholder="sk-ant-..."
+                  placeholder="AIzaSy..."
                   className="w-full p-3 pr-10 border rounded-lg font-mono text-sm"
                 />
                 <button
@@ -280,7 +280,7 @@ export default function Import() {
                   </>
                 ) : (
                   <>
-                    <Sparkles size={20} /> Generer 10 exercices avec Claude
+                    <Sparkles size={20} /> Generer 10 exercices avec Gemini
                   </>
                 )}
               </button>
