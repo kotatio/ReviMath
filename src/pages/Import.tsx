@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Upload, FileText, Loader2, Sparkles, Play, Key, AlertCircle, Trash2, Eye, EyeOff, X } from 'lucide-react';
+import { ArrowLeft, Upload, FileText, Loader2, Sparkles, Play, Key, AlertCircle, Trash2, Eye, EyeOff } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { extractTextFromPDF, type ExtractionProgress } from '../lib/pdf-extract';
 import { generateExercises } from '../lib/generate-exercises';
