@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Upload, FileText, Loader2, Sparkles, Play, Key, AlertCircle, Trash2, Eye, EyeOff } from 'lucide-react';
 import { useStore } from '../store/useStore';
-import { extractTextFromPDF } from '../lib/pdf-extract';
+import { extractTextFromPDF, type ExtractionProgress } from '../lib/pdf-extract';
 import { generateExercises } from '../lib/generate-exercises';
 import { saveApiKey, loadApiKey, clearApiKey, maskApiKey } from '../lib/api-key';
 import type { Exercise, ImportedSession } from '../types';
@@ -25,6 +25,7 @@ export default function Import() {
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [error, setError] = useState('');
   const [sessionId, setSessionId] = useState('');
+  const [extractProgress, setExtractProgress] = useState<ExtractionProgress | null>(null);
 
   const handleFile = async (file: File) => {
     if (!file.name.endsWith('.pdf')) {
@@ -36,15 +37,17 @@ export default function Import() {
     setStep('extracting');
 
     try {
-      const text = await extractTextFromPDF(file);
+      const text = await extractTextFromPDF(file, (p) => setExtractProgress(p));
+      setExtractProgress(null);
       if (text.trim().length < 20) {
-        setError('Le PDF ne contient pas assez de texte exploitable (peut-etre un scan/image).');
+        setError('Impossible d\'extraire du texte de ce PDF.');
         setStep('upload');
         return;
       }
       setExtractedText(text);
       setStep('extracted');
     } catch {
+      setExtractProgress(null);
       setError('Erreur lors de la lecture du PDF.');
       setStep('upload');
     }
@@ -209,7 +212,14 @@ export default function Import() {
             {step === 'extracting' ? (
               <div className="flex flex-col items-center gap-3">
                 <Loader2 size={40} className="text-blue-500 animate-spin" />
-                <p className="text-gray-600 font-medium">Extraction du texte de {fileName}...</p>
+                <p className="text-gray-600 font-medium">
+                  {extractProgress?.stage === 'ocr'
+                    ? `OCR page ${extractProgress.page}/${extractProgress.totalPages} (scan detecte)...`
+                    : `Extraction du texte de ${fileName}...`}
+                </p>
+                {extractProgress?.stage === 'ocr' && (
+                  <p className="text-xs text-gray-400">L'OCR peut prendre quelques secondes par page</p>
+                )}
               </div>
             ) : (
               <div className="flex flex-col items-center gap-3">
