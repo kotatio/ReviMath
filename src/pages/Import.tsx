@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Upload, FileText, Loader2, Sparkles, Play, Key, AlertCircle, Trash2, Eye, EyeOff } from 'lucide-react';
+import { ArrowLeft, Upload, FileText, Loader2, Sparkles, Play, Key, AlertCircle, Trash2, Eye, EyeOff, X } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { extractTextFromPDF, type ExtractionProgress } from '../lib/pdf-extract';
 import { generateExercises } from '../lib/generate-exercises';
@@ -20,43 +20,75 @@ export default function Import() {
   const [hasKey, setHasKey] = useState(savedKey.length > 0);
   const [showKey, setShowKey] = useState(false);
   const [fileName, setFileName] = useState('');
+  const [fileNames, setFileNames] = useState<string[]>([]);
   const [extractedText, setExtractedText] = useState('');
   const [level, setLevel] = useState<'6e' | '5e'>('6e');
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [error, setError] = useState('');
   const [sessionId, setSessionId] = useState('');
   const [extractProgress, setExtractProgress] = useState<ExtractionProgress | null>(null);
+  const [fileType, setFileType] = useState<'pdf' | 'md'>('pdf');
 
-  const handleFile = async (file: File) => {
-    if (!file.name.endsWith('.pdf')) {
-      setError('Seuls les fichiers PDF sont acceptes');
+  const handleFiles = async (files: FileList) => {
+    const fileArray = Array.from(files);
+    const mdFiles = fileArray.filter((f) => f.name.endsWith('.md'));
+    const pdfFiles = fileArray.filter((f) => f.name.endsWith('.pdf'));
+
+    if (mdFiles.length === 0 && pdfFiles.length === 0) {
+      setError('Seuls les fichiers PDF et Markdown (.md) sont acceptes');
       return;
     }
+    if (mdFiles.length > 0 && pdfFiles.length > 0) {
+      setError('Importe soit des PDF, soit des Markdown, pas les deux');
+      return;
+    }
+
     setError('');
-    setFileName(file.name);
+    const names = fileArray.map((f) => f.name);
+    setFileNames(names);
+    setFileName(names.length === 1 ? names[0] : `${names.length} fichiers`);
     setStep('extracting');
 
     try {
-      const text = await extractTextFromPDF(file, (p) => setExtractProgress(p));
-      setExtractProgress(null);
-      if (text.trim().length < 20) {
-        setError('Impossible d\'extraire du texte de ce PDF.');
-        setStep('upload');
-        return;
+      if (mdFiles.length > 0) {
+        // Read all .md files and concatenate
+        const texts: string[] = [];
+        for (const f of mdFiles) {
+          const content = await f.text();
+          texts.push(`# ${f.name}\n\n${content}`);
+        }
+        const combined = texts.join('\n\n---\n\n');
+        if (combined.trim().length < 20) {
+          setError('Les fichiers Markdown ne contiennent pas assez de texte.');
+          setStep('upload');
+          return;
+        }
+        setExtractedText(combined);
+        setStep('extracted');
+      } else {
+        // PDF: only first file
+        const file = pdfFiles[0];
+        const text = await extractTextFromPDF(file, (p) => setExtractProgress(p));
+        setExtractProgress(null);
+        if (text.trim().length < 20) {
+          setError('Impossible d\'extraire du texte de ce PDF.');
+          setStep('upload');
+          return;
+        }
+        setExtractedText(text);
+        setStep('extracted');
       }
-      setExtractedText(text);
-      setStep('extracted');
     } catch {
       setExtractProgress(null);
-      setError('Erreur lors de la lecture du PDF.');
+      setError('Erreur lors de la lecture des fichiers.');
       setStep('upload');
     }
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
-    const file = e.dataTransfer.files[0];
-    if (file) handleFile(file);
+    const files = e.dataTransfer.files;
+    if (files.length > 0) handleFiles(files);
   };
 
   const handleSaveKey = () => {
@@ -106,10 +138,13 @@ export default function Import() {
   };
 
   const handleLaunch = () => {
+    const title = fileNames.length === 1
+      ? fileNames[0].replace(/\.(pdf|md)$/i, '')
+      : fileNames.map((n) => n.replace(/\.(pdf|md)$/i, '')).join(' + ');
     const session: ImportedSession = {
       id: sessionId,
-      title: fileName.replace('.pdf', ''),
-      sourceFileName: fileName,
+      title,
+      sourceFileName: fileNames.join(', '),
       exercises,
       createdAt: new Date().toISOString(),
       level,
@@ -132,7 +167,7 @@ export default function Import() {
           <button onClick={() => navigate('/')} className="text-gray-400 hover:text-gray-600">
             <ArrowLeft size={24} />
           </button>
-          <h1 className="text-xl font-bold text-gray-900">Importer un PDF</h1>
+          <h1 className="text-xl font-bold text-gray-900">Importer un document</h1>
         </div>
       </header>
 
@@ -199,46 +234,88 @@ export default function Import() {
           </div>
         )}
 
-        {/* Upload Zone */}
+        {/* Format Selector + Upload Zone */}
         {(step === 'upload' || step === 'extracting') && (
-          <div
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={handleDrop}
-            onClick={() => fileRef.current?.click()}
-            className={`bg-white rounded-xl p-10 shadow-sm border-2 border-dashed cursor-pointer transition-all text-center ${
-              step === 'extracting' ? 'border-blue-300 bg-blue-50' : 'border-gray-300 hover:border-blue-400'
-            }`}
-          >
-            {step === 'extracting' ? (
-              <div className="flex flex-col items-center gap-3">
-                <Loader2 size={40} className="text-blue-500 animate-spin" />
-                <p className="text-gray-600 font-medium">
-                  {extractProgress?.stage === 'ocr'
-                    ? `OCR page ${extractProgress.page}/${extractProgress.totalPages} (scan detecte)...`
-                    : `Extraction du texte de ${fileName}...`}
-                </p>
-                {extractProgress?.stage === 'ocr' && (
-                  <p className="text-xs text-gray-400">L'OCR peut prendre quelques secondes par page</p>
-                )}
+          <>
+            <div className="bg-white rounded-xl p-5 shadow-sm">
+              <h2 className="font-bold text-gray-900 mb-3">Type de document</h2>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setFileType('pdf')}
+                  className={`flex-1 flex flex-col items-center gap-1 p-3 rounded-lg font-bold text-sm transition-all border-2 ${
+                    fileType === 'pdf'
+                      ? 'border-blue-500 bg-blue-50 text-blue-700'
+                      : 'border-gray-200 bg-gray-50 text-gray-500 hover:border-gray-300'
+                  }`}
+                >
+                  <FileText size={24} />
+                  <span>PDF</span>
+                  <span className="text-xs font-normal">Cours, controles scannes</span>
+                </button>
+                <button
+                  onClick={() => setFileType('md')}
+                  className={`flex-1 flex flex-col items-center gap-1 p-3 rounded-lg font-bold text-sm transition-all border-2 ${
+                    fileType === 'md'
+                      ? 'border-blue-500 bg-blue-50 text-blue-700'
+                      : 'border-gray-200 bg-gray-50 text-gray-500 hover:border-gray-300'
+                  }`}
+                >
+                  <FileText size={24} />
+                  <span>Markdown</span>
+                  <span className="text-xs font-normal">Fiches texte, notes .md</span>
+                </button>
               </div>
-            ) : (
-              <div className="flex flex-col items-center gap-3">
-                <Upload size={40} className="text-gray-400" />
-                <p className="text-gray-600 font-medium">Glisse un PDF ici ou clique pour choisir</p>
-                <p className="text-xs text-gray-400">Cours, fiches d'exercices, controles...</p>
-              </div>
-            )}
-            <input
-              ref={fileRef}
-              type="file"
-              accept=".pdf"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) handleFile(file);
-              }}
-            />
-          </div>
+            </div>
+
+            <div
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={handleDrop}
+              onClick={() => fileRef.current?.click()}
+              className={`bg-white rounded-xl p-10 shadow-sm border-2 border-dashed cursor-pointer transition-all text-center ${
+                step === 'extracting' ? 'border-blue-300 bg-blue-50' : 'border-gray-300 hover:border-blue-400'
+              }`}
+            >
+              {step === 'extracting' ? (
+                <div className="flex flex-col items-center gap-3">
+                  <Loader2 size={40} className="text-blue-500 animate-spin" />
+                  <p className="text-gray-600 font-medium">
+                    {extractProgress?.stage === 'ocr'
+                      ? `OCR page ${extractProgress.page}/${extractProgress.totalPages} (scan detecte)...`
+                      : `Lecture de ${fileName}...`}
+                  </p>
+                  {extractProgress?.stage === 'ocr' && (
+                    <p className="text-xs text-gray-400">L'OCR peut prendre quelques secondes par page</p>
+                  )}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-3">
+                  <Upload size={40} className="text-gray-400" />
+                  {fileType === 'pdf' ? (
+                    <>
+                      <p className="text-gray-600 font-medium">Glisse un PDF ici ou clique pour choisir</p>
+                      <p className="text-xs text-gray-400">Cours, fiches d'exercices, controles...</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-gray-600 font-medium">Glisse un ou plusieurs fichiers .md</p>
+                      <p className="text-xs text-gray-400">Tu peux en selectionner plusieurs a la fois</p>
+                    </>
+                  )}
+                </div>
+              )}
+              <input
+                ref={fileRef}
+                type="file"
+                accept={fileType === 'pdf' ? '.pdf' : '.md'}
+                multiple={fileType === 'md'}
+                className="hidden"
+                onChange={(e) => {
+                  const files = e.target.files;
+                  if (files && files.length > 0) handleFiles(files);
+                }}
+              />
+            </div>
+          </>
         )}
 
         {/* Extracted Text Preview */}

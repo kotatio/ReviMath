@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Settings, Upload, FileText, Trash2 } from 'lucide-react';
+import { Settings, Upload, FileText, Trash2, Star, CheckCircle2 } from 'lucide-react';
 import { chapters } from '../data/chapters';
 import { useStore } from '../store/useStore';
 import ChapterCard from '../components/ChapterCard';
@@ -18,6 +18,8 @@ export default function Home() {
   const getHearts = useStore((s) => s.getHearts);
   const importedSessions = useStore((s) => s.importedSessions);
   const removeImportedSession = useStore((s) => s.removeImportedSession);
+  const lessonScores = useStore((s) => s.lessonScores);
+  const completedLessons = useStore((s) => s.completedLessons);
 
   const filtered = filter === 'tous' ? chapters : chapters.filter((c) => c.level === filter);
 
@@ -43,7 +45,7 @@ export default function Home() {
           onClick={() => navigate('/import')}
           className="w-full flex items-center justify-center gap-2 mb-6 px-4 py-3 bg-purple-500 text-white font-bold rounded-xl hover:bg-purple-600 transition-all shadow-md"
         >
-          <Upload size={20} /> Importer un PDF
+          <Upload size={20} /> Importer un PDF / Markdown
         </button>
 
         {/* Imported Sessions */}
@@ -51,36 +53,64 @@ export default function Home() {
           <div className="mb-6">
             <h2 className="font-bold text-gray-700 mb-3">Sessions importees</h2>
             <div className="space-y-2">
-              {importedSessions.map((session) => (
-                <div
-                  key={session.id}
-                  className="bg-white rounded-xl p-4 shadow-sm flex items-center gap-3 hover:shadow-md transition-all"
-                >
+              {importedSessions.map((session) => {
+                const scoreData = lessonScores[session.id];
+                const isCompleted = completedLessons.includes(session.id);
+                const ratio = scoreData ? scoreData.score / scoreData.total : 0;
+                const stars = scoreData ? (ratio === 1 ? 3 : ratio >= 0.7 ? 2 : 1) : 0;
+
+                return (
                   <div
-                    className="flex-1 cursor-pointer"
-                    onClick={() => navigate(`/lesson/${session.id}`)}
+                    key={session.id}
+                    className="bg-white rounded-xl p-4 shadow-sm flex items-center gap-3 hover:shadow-md transition-all"
                   >
-                    <div className="flex items-center gap-2">
-                      <FileText size={18} className="text-purple-500" />
-                      <span className="font-bold text-gray-800">{session.title}</span>
-                      {session.level && (
-                        <span className="text-xs font-bold bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
-                          {session.level.toUpperCase()}
-                        </span>
-                      )}
+                    <div
+                      className="flex-1 cursor-pointer"
+                      onClick={() => navigate(`/lesson/${session.id}`)}
+                    >
+                      <div className="flex items-center gap-2">
+                        <FileText size={18} className="text-purple-500" />
+                        <span className="font-bold text-gray-800">{session.title}</span>
+                        {session.level && (
+                          <span className="text-xs font-bold bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
+                            {session.level.toUpperCase()}
+                          </span>
+                        )}
+                        {isCompleted && (
+                          <CheckCircle2 size={16} className="text-green-500" />
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 mt-1">
+                        <p className="text-xs text-gray-400">
+                          {session.exercises.length} exercices &middot; {new Date(session.createdAt).toLocaleDateString('fr-FR')}
+                        </p>
+                        {scoreData && (
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs font-bold text-gray-600">
+                              {scoreData.score}/{scoreData.total}
+                            </span>
+                            <div className="flex">
+                              {[1, 2, 3].map((n) => (
+                                <Star
+                                  key={n}
+                                  size={12}
+                                  className={n <= stars ? 'text-yellow-400 fill-yellow-400' : 'text-gray-200'}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    <p className="text-xs text-gray-400 mt-1">
-                      {session.exercises.length} exercices &middot; {new Date(session.createdAt).toLocaleDateString('fr-FR')}
-                    </p>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); removeImportedSession(session.id); }}
+                      className="text-gray-300 hover:text-red-500 p-1 transition-colors"
+                    >
+                      <Trash2 size={16} />
+                    </button>
                   </div>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); removeImportedSession(session.id); }}
-                    className="text-gray-300 hover:text-red-500 p-1 transition-colors"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}

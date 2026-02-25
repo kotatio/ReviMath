@@ -134,7 +134,7 @@ export default function Lesson() {
         <div className="w-full max-w-lg">
           <p className="text-sm text-gray-400 text-center mb-2">
             {importedSession
-              ? `PDF Import \u00b7 ${importedSession.title}`
+              ? `Import \u00b7 ${importedSession.title}`
               : `${result!.chapter.title} \u00b7 ${result!.lesson.title}`}
           </p>
 
